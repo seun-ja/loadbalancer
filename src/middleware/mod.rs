@@ -1,51 +1,58 @@
-use std::str::FromStr;
+use axum::{
+    body::{BodyDataStream, Bytes},
+    extract::State,
+    http::Request,
+    middleware::Next,
+};
+use futures_util::stream::StreamExt;
+use serde_json::Value;
 
-use axum::{extract::State, http::Request, middleware::Next};
-use reqwest::Url;
+use crate::{config::State as AppState, error::Error, middleware::server::ApiResponse};
 
-use crate::config::State as AppState;
+mod server;
 
-#[derive(Clone, Debug)]
-pub struct ServerClients {
-    pub available_servers: Vec<Server>,
+pub use server::{Server, ServerClients};
+
+pub async fn request_route(
+    State(state): State<AppState>,
+    req: Request<axum::body::Body>,
+    _next: Next,
+) -> Result<ApiResponse, Error> {
+    let (parts, body) = req.into_parts();
+
+    tracing::info!("New Request Received");
+
+    let body_data_stream = body.into_data_stream();
+    // TODO: add mechanism to check if the required route expecting a body gets if not throw error
+    let json_body = BodyBytes::from_body_data_stream(body_data_stream)
+        .await?
+        .to_json()
+        .ok();
+
+    let route = parts.uri.to_string();
+
+    state
+        .available_servers
+        .choiced_server()
+        .handle_request(parts.method, route.trim_start_matches('/'), json_body)
+        .await
 }
 
-impl ServerClients {
-    pub fn new(available_servers: Vec<Server>) -> Self {
-        Self { available_servers }
+struct BodyBytes(Bytes);
+
+impl BodyBytes {
+    async fn from_body_data_stream(mut body_stream: BodyDataStream) -> anyhow::Result<Self> {
+        let mut body = Vec::new();
+
+        while let Some(chunk_result) = body_stream.next().await {
+            let chunk = chunk_result?;
+            body.extend_from_slice(&chunk);
+        }
+
+        Ok(BodyBytes(Bytes::from(body)))
     }
-    fn choiced_server(&self) -> Server {
-        // implement algorithm to select server here!
-        self.available_servers[0].clone() // placeholder for now
+
+    fn to_json(&self) -> Result<Value, serde_json::Error> {
+        serde_json::from_slice(&self.0)
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct Server {
-    pub url: Url,
-}
-
-impl Server {
-    pub fn new(url: &str) -> anyhow::Result<Server> {
-        Ok(Self {
-            url: Url::from_str(url)?,
-        })
-    }
-}
-
-pub async fn request_route<B>(State(state): State<AppState>, req: Request<B>, _next: Next<B>) {
-    let (parts, _body) = req.into_parts();
-
-    let choiced_server = state.available_servers.choiced_server();
-
-    let reconstructed_request_url = reconstruct_request(
-        &choiced_server.url,
-        &parts.uri.to_string().trim_start_matches('/'),
-    );
-
-    dbg!(reconstructed_request_url);
-}
-
-fn reconstruct_request(url: &Url, route: &str) -> String {
-    format!("{url}{route}")
 }
