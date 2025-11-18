@@ -12,6 +12,7 @@ use crate::{
     config::{State, SystemConfig},
     middleware::request_route,
     servers::health::status,
+    services::server_worker,
 };
 
 pub mod config;
@@ -53,26 +54,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
-    let main: JoinHandle<Result<(), std::io::Error>> =
-        tokio::spawn(async move { axum::serve(listener, server).await });
+    let main = tokio::spawn(async move { axum::serve(listener, server).await });
 
-    let app = App::new(main);
+    let background_worker = tokio::spawn(async move {
+        let _: () = server_worker(state.clone().available_servers.available_servers).await;
+        Ok(())
+    });
+
+    let app = App::new(main, background_worker);
 
     app.start().await
 }
 
+type JoinHandleWrapper = JoinHandle<Result<(), std::io::Error>>;
+
+/// Application struct to hold main and background worker tasks
 struct App {
-    main: JoinHandle<Result<(), std::io::Error>>,
-    // background_worker: JoinHandle<Result<(), std::io::Error>>,
+    main: JoinHandleWrapper,
+    background_worker: JoinHandleWrapper,
 }
 
 impl App {
-    fn new(main: JoinHandle<Result<(), std::io::Error>>) -> Self {
-        Self { main }
+    fn new(main: JoinHandleWrapper, background_worker: JoinHandleWrapper) -> Self {
+        Self {
+            main,
+            background_worker,
+        }
     }
 
     async fn start(self) -> Result<(), Box<dyn std::error::Error>> {
-        match tokio::try_join!(self.main) {
+        match tokio::try_join!(self.main, self.background_worker) {
             Ok(_) => Ok(()),
             Err(err) => Err(err)?,
         }

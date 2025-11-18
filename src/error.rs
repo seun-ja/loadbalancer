@@ -1,6 +1,7 @@
 use axum::response::{IntoResponse, Response};
 use reqwest::StatusCode;
 
+/// Custom error types for the load balancer application
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Not Found")]

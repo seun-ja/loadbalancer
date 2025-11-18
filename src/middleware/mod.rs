@@ -13,6 +13,7 @@ mod server;
 
 pub use server::{Server, ServerClients};
 
+/// Middleware function to route requests to appropriate servers
 pub async fn request_route(
     State(state): State<AppState>,
     req: Request<axum::body::Body>,
@@ -22,9 +23,7 @@ pub async fn request_route(
 
     tracing::info!("New Request Received");
 
-    let body_data_stream = body.into_data_stream();
-    // TODO: add mechanism to check if the required route expecting a body gets if not throw error
-    let json_body = BodyBytes::from_body_data_stream(body_data_stream)
+    let json_body = BodyBytes::from_body_data_stream(body.into_data_stream())
         .await?
         .to_json()
         .ok();

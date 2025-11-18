@@ -5,6 +5,7 @@ use reqwest::{Method, Response as ReqwestResponse, StatusCode, Url};
 
 use crate::error::Error;
 
+/// Represents a collection of server clients for load balancing
 #[derive(Clone, Debug)]
 pub struct ServerClients {
     pub available_servers: Vec<Server>,
@@ -15,6 +16,7 @@ impl ServerClients {
         Self { available_servers }
     }
 
+    /// Selects a server based on a load balancing algorithm
     pub fn choiced_server(&self) -> Server {
         // implement algorithm to select server here!
         self.available_servers[0].clone() // placeholder for now
@@ -35,6 +37,7 @@ impl Server {
         })
     }
 
+    /// Handles incoming requests and forwards them to the server
     pub async fn handle_request(
         &self,
         method: Method,
@@ -48,6 +51,7 @@ impl Server {
         }
     }
 
+    /// Sends a POST request to the server
     pub async fn post_request(
         &self,
         route: &str,
@@ -69,6 +73,7 @@ impl Server {
         response.map_err(|e| Error::Other(e.into()))?.await
     }
 
+    /// Sends a GET request to the server
     pub async fn get_request(
         &self,
         route: &str,
@@ -90,6 +95,7 @@ impl Server {
         response.map_err(|e| Error::Other(e.into()))?.await
     }
 
+    /// Checks if the server is available by sending a request to the `/status` endpoint
     pub async fn is_available(&self) -> bool {
         if let Ok(url) = self.url.join("/status") {
             match self.client.get(url).send().await {
