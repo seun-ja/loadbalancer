@@ -1,3 +1,5 @@
+#![deny(clippy::disallowed_methods)]
+
 use std::net::SocketAddr;
 
 use axum::{Router, routing::get};
