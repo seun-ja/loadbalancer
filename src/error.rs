@@ -25,6 +25,7 @@ impl IntoResponse for Error {
         match self {
             Error::NotFound => (StatusCode::NOT_FOUND, self).into_response(),
             Error::InternalServerError | Error::Other(_) | Error::InvalidResponse => {
+                tracing::error!("Internal Server Error: {:?}", self);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             Error::Unauthorized => (StatusCode::UNAUTHORIZED, self).into_response(),

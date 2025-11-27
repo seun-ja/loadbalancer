@@ -1,11 +1,16 @@
 use serde::Deserialize;
 
-use crate::middleware::{Server, ServerClients};
+use crate::{
+    algorithms::Algorithm,
+    middleware::{Server, ServerClients},
+};
 
 #[derive(Deserialize, Debug)]
 pub struct SystemConfig {
     pub available_servers: String, // TODO: This should be hosted in redis
     pub port: u16,
+    pub algorithm: String,
+    pub trace_level: String,
 }
 
 impl SystemConfig {
@@ -17,9 +22,10 @@ impl SystemConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct State {
     pub available_servers: ServerClients,
+    pub algorithm: Algorithm,
 }
 
 impl State {
@@ -34,6 +40,7 @@ impl State {
 
         Ok(State {
             available_servers: ServerClients::new(available_servers),
+            algorithm: config.algorithm.clone().into(),
         })
     }
 }
