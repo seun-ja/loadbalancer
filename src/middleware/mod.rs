@@ -3,11 +3,12 @@ use axum::{
     extract::State,
     http::Request,
     middleware::Next,
+    response::IntoResponse,
 };
 use futures_util::stream::StreamExt;
 use serde_json::Value;
 
-use crate::{config::State as AppState, error::Error, middleware::server::ApiResponse};
+use crate::{config::State as AppState, error::Error};
 
 mod server;
 
@@ -17,8 +18,12 @@ pub use server::{Server, ServerClients};
 pub async fn request_route(
     State(state): State<AppState>,
     req: Request<axum::body::Body>,
-    _next: Next,
-) -> Result<ApiResponse, Error> {
+    next: Next,
+) -> Result<impl IntoResponse, Error> {
+    if req.uri().path().starts_with("/status") {
+        return Ok(next.run(req).await);
+    }
+
     let (parts, body) = req.into_parts();
 
     tracing::info!("New Request Received");
@@ -30,11 +35,13 @@ pub async fn request_route(
 
     let route = parts.uri.to_string();
 
-    state
+    let response = state
         .available_servers
         .choiced_server()
         .handle_request(parts.method, route.trim_start_matches('/'), json_body)
-        .await
+        .await?;
+
+    Ok(response.into_response())
 }
 
 struct BodyBytes(Bytes);

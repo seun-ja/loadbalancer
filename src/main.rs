@@ -1,6 +1,6 @@
 #![deny(clippy::disallowed_methods)]
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr as _};
 
 use axum::{Router, routing::get};
 use tokio::task::JoinHandle;
@@ -17,6 +17,7 @@ use crate::{
     services::server_worker,
 };
 
+pub mod algorithms;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -26,12 +27,12 @@ mod services;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = SystemConfig::from_env()?;
+
     tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::from_str(&config.trace_level)?)
         .pretty()
         .init();
-
-    let config = SystemConfig::from_env()?;
 
     let state = State::new(&config).await?;
 
