@@ -37,7 +37,8 @@ pub async fn request_route(
 
     let response = state
         .available_servers
-        .choiced_server()
+        .selected_server(state.algorithm)
+        .await?
         .handle_request(parts.method, route.trim_start_matches('/'), json_body)
         .await?;
 

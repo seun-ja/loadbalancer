@@ -3,7 +3,7 @@ use std::str::FromStr;
 use axum::response::{IntoResponse, Response};
 use reqwest::{Method, Response as ReqwestResponse, StatusCode, Url};
 
-use crate::error::Error;
+use crate::{algorithms::Algorithm, error::Error};
 
 /// Represents a collection of server clients for load balancing
 #[derive(Clone, Debug)]
@@ -17,9 +17,8 @@ impl ServerClients {
     }
 
     /// Selects a server based on a load balancing algorithm
-    pub fn choiced_server(&self) -> Server {
-        // implement algorithm to select server here!
-        self.available_servers[0].clone() // placeholder for now
+    pub async fn selected_server(&self, algorithm: Algorithm) -> Result<Server, Error> {
+        algorithm.select_server(&self.available_servers).await
     }
 }
 
