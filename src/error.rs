@@ -12,6 +12,8 @@ pub enum Error {
     Unauthorized,
     #[error("Other: {0}")]
     Other(#[from] anyhow::Error),
+    #[error("Redis Error: {0}")]
+    RedisError(#[from] redis::RedisError),
     #[error("Method Not Allowed")]
     MethodNotAllowed,
     #[error("Invalid URL")]
@@ -24,7 +26,10 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         match self {
             Error::NotFound => (StatusCode::NOT_FOUND, self).into_response(),
-            Error::InternalServerError | Error::Other(_) | Error::InvalidResponse => {
+            Error::InternalServerError
+            | Error::Other(_)
+            | Error::InvalidResponse
+            | Error::RedisError(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             Error::Unauthorized => (StatusCode::UNAUTHORIZED, self).into_response(),
