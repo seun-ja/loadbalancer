@@ -18,10 +18,11 @@ use crate::{
 };
 
 pub mod config;
+pub mod db;
 pub mod error;
-pub mod middleware;
-pub mod servers;
-pub mod services;
+mod middleware;
+mod servers;
+mod services;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = SystemConfig::from_env()?;
 
-    let state = State::new(&config)?;
+    let state = State::new(&config).await?;
 
     let server = Router::new()
         .route("/status", get(status))
