@@ -1,8 +1,7 @@
-// Server reports its current load
-// Redis collection of current state of servers or use Kafka to collect data
-
 use crate::{error::Error, middleware::Server};
 
-pub async fn least_connection(_available_servers: &[Server]) -> Result<Server, Error> {
-    todo!()
+pub async fn least_connection(available_servers: &[Server]) -> Result<Server, Error> {
+    let server = available_servers.iter().min_by_key(|server| server.load());
+
+    Ok(server.unwrap_or(&available_servers[0]).clone())
 }

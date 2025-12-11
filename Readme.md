@@ -12,7 +12,7 @@ Prerequisites:
 Create a `.env` file at the project root (example):
 
 ```bash
-AVAILABLE_SERVERS=http://localhost:3001,http://localhost:3002
+AVAILABLE_SERVERS=http://localhost:3001$4,http://localhost:3002$8
 PORT=8080
 ```
 
@@ -34,7 +34,7 @@ The server binds to the configured PORT.
 
 This project reads configuration from environment variables. The important variables are:
 
-`AVAILABLE_SERVERS` — comma-separated list of backend base URLs (e.g. http://host:port).
+`AVAILABLE_SERVERS` — comma-separated list of backend base URLs and their weights (e.g. http://host:port$weight).
 
 `PORT` — port to bind the load balancer to.
 

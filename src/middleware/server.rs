@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    sync::{Arc, atomic::AtomicU32},
+};
 
 use axum::response::{IntoResponse, Response};
 use reqwest::{Method, Response as ReqwestResponse, StatusCode, Url};
@@ -18,7 +21,12 @@ impl ServerClients {
 
     /// Selects a server based on a load balancing algorithm
     pub async fn selected_server(&self, algorithm: Algorithm) -> Result<Server, Error> {
-        algorithm.select_server(&self.available_servers).await
+        algorithm
+            .select_server(&self.available_servers)
+            .await
+            .inspect(|s| {
+                s.load.fetch_add(1, std::sync::atomic::Ordering::Acquire);
+            })
     }
 }
 
@@ -26,14 +34,35 @@ impl ServerClients {
 pub struct Server {
     pub url: Url,
     pub client: reqwest::Client,
+    load: Arc<AtomicU32>,
+    weight: u32,
 }
 
 impl Server {
-    pub fn new(url: &str) -> anyhow::Result<Server> {
+    pub fn new(url_and_weight: &str) -> anyhow::Result<Server> {
+        let (url, weight) = url_and_weight
+            .split_once('$')
+            .ok_or_else(|| anyhow::anyhow!("Invalid server format, expected 'url$weight'"))?;
+        let weight = weight
+            .parse::<u32>()
+            .map_err(|_| anyhow::anyhow!("Invalid weight, expected a positive integer"))?;
+
         Ok(Self {
             url: Url::from_str(url)?,
             client: Default::default(),
+            load: Arc::new(AtomicU32::new(0)),
+            weight,
         })
+    }
+
+    /// Returns the current load of the server
+    pub fn load(&self) -> u32 {
+        self.load.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Returns the weight of the server
+    pub fn weight(&self) -> u32 {
+        self.weight
     }
 
     /// Handles incoming requests and forwards them to the server
@@ -43,10 +72,18 @@ impl Server {
         route: &str,
         body: Option<serde_json::Value>,
     ) -> Result<ApiResponse, Error> {
+        // TODO: What if the request fails is the load count reduced?
         match method {
-            Method::GET => self.get_request(route, body).await,
-            Method::POST => self.post_request(route, body).await,
-            _ => Err(Error::MethodNotAllowed),
+            Method::GET => self.get_request(route, body).await.inspect(|_| {
+                self.load.fetch_sub(1, std::sync::atomic::Ordering::Release);
+            }),
+            Method::POST => self.post_request(route, body).await.inspect(|_| {
+                self.load.fetch_sub(1, std::sync::atomic::Ordering::Release);
+            }),
+            _ => {
+                self.load.fetch_sub(1, std::sync::atomic::Ordering::Release);
+                Err(Error::MethodNotAllowed)
+            }
         }
     }
 
