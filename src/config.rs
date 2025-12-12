@@ -6,7 +6,7 @@ use crate::{
     middleware::{Server, ServerClients},
 };
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct SystemConfig {
     pub available_servers: String, // TODO: This should be hosted in redis
     pub port: u16,

@@ -14,7 +14,7 @@ use crate::{
     config::{State, SystemConfig},
     middleware::request_route,
     servers::health::status,
-    services::server_worker,
+    services::server_status_worker,
 };
 
 pub mod algorithms;
@@ -60,12 +60,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let main = tokio::spawn(async move { axum::serve(listener, server).await });
 
-    let background_worker = tokio::spawn(async move {
-        let _: () = server_worker(state.clone().available_servers.available_servers).await;
+    let server_status_background_worker = tokio::spawn(async move {
+        let _: () = server_status_worker(state.clone().available_servers.available_servers).await;
         Ok(())
     });
 
-    let app = App::new(main, background_worker);
+    // let latency_tracker_background_worker = tokio::spawn(async move {
+    //     let _: () = latency_tracker_worker(state.clone().available_servers.available_servers).await;
+    //     Ok(())
+    // });
+
+    let app = App::new(
+        main,
+        server_status_background_worker,
+        // latency_tracker_background_worker,
+    );
 
     app.start().await
 }
@@ -76,13 +85,19 @@ type JoinHandleWrapper = JoinHandle<Result<(), std::io::Error>>;
 struct App {
     main: JoinHandleWrapper,
     background_worker: JoinHandleWrapper,
+    // latency_tracker_background_worker: JoinHandleWrapper,
 }
 
 impl App {
-    fn new(main: JoinHandleWrapper, background_worker: JoinHandleWrapper) -> Self {
+    fn new(
+        main: JoinHandleWrapper,
+        background_worker: JoinHandleWrapper,
+        // latency_tracker_background_worker: JoinHandleWrapper,
+    ) -> Self {
         Self {
             main,
             background_worker,
+            // latency_tracker_background_worker,
         }
     }
 

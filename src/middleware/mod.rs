@@ -35,12 +35,20 @@ pub async fn request_route(
 
     let route = parts.uri.to_string();
 
-    let response = state
+    let start_time = std::time::Instant::now();
+
+    let mut server: Server = state
         .available_servers
         .selected_server(state.algorithm)
-        .await?
+        .await?;
+
+    let response = server
         .handle_request(parts.method, route.trim_start_matches('/'), json_body)
         .await?;
+
+    let latency = start_time.elapsed().as_millis();
+
+    server.update_latencies(latency);
 
     Ok(response.into_response())
 }

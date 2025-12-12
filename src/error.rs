@@ -20,6 +20,8 @@ pub enum Error {
     InvalidUrl,
     #[error("Invalid Response")]
     InvalidResponse,
+    #[error("No Server Available")]
+    NoServerAvailable,
 }
 
 impl IntoResponse for Error {
@@ -29,7 +31,8 @@ impl IntoResponse for Error {
             Error::InternalServerError
             | Error::Other(_)
             | Error::InvalidResponse
-            | Error::RedisError(_) => {
+            | Error::RedisError(_)
+            | Error::NoServerAvailable => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             Error::Unauthorized => (StatusCode::UNAUTHORIZED, self).into_response(),
