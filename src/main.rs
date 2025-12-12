@@ -1,6 +1,6 @@
 #![deny(clippy::disallowed_methods)]
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr as _};
 
 use axum::{Router, routing::get};
 use tokio::task::JoinHandle;
@@ -14,9 +14,10 @@ use crate::{
     config::{State, SystemConfig},
     middleware::request_route,
     servers::health::status,
-    services::server_worker,
+    services::server_status_worker,
 };
 
+pub mod algorithms;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -26,12 +27,12 @@ mod services;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = SystemConfig::from_env()?;
+
     tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::from_str(&config.trace_level)?)
         .pretty()
         .init();
-
-    let config = SystemConfig::from_env()?;
 
     let state = State::new(&config).await?;
 
@@ -59,12 +60,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let main = tokio::spawn(async move { axum::serve(listener, server).await });
 
-    let background_worker = tokio::spawn(async move {
-        let _: () = server_worker(state.clone().available_servers.available_servers).await;
+    let server_status_background_worker = tokio::spawn(async move {
+        let _: () = server_status_worker(state.clone().available_servers.available_servers).await;
         Ok(())
     });
 
-    let app = App::new(main, background_worker);
+    // let latency_tracker_background_worker = tokio::spawn(async move {
+    //     let _: () = latency_tracker_worker(state.clone().available_servers.available_servers).await;
+    //     Ok(())
+    // });
+
+    let app = App::new(
+        main,
+        server_status_background_worker,
+        // latency_tracker_background_worker,
+    );
 
     app.start().await
 }
@@ -75,13 +85,19 @@ type JoinHandleWrapper = JoinHandle<Result<(), std::io::Error>>;
 struct App {
     main: JoinHandleWrapper,
     background_worker: JoinHandleWrapper,
+    // latency_tracker_background_worker: JoinHandleWrapper,
 }
 
 impl App {
-    fn new(main: JoinHandleWrapper, background_worker: JoinHandleWrapper) -> Self {
+    fn new(
+        main: JoinHandleWrapper,
+        background_worker: JoinHandleWrapper,
+        // latency_tracker_background_worker: JoinHandleWrapper,
+    ) -> Self {
         Self {
             main,
             background_worker,
+            // latency_tracker_background_worker,
         }
     }
 
