@@ -13,8 +13,8 @@ use tracing::Level;
 use crate::{
     config::{State, SystemConfig},
     middleware::request_route,
-    servers::health::status,
-    services::server_status_worker,
+    route::health::status,
+    services::{latency_tracker_worker, server_status_worker},
 };
 
 pub mod algorithms;
@@ -22,7 +22,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 mod middleware;
-mod servers;
+mod route;
 mod services;
 
 #[tokio::main]
@@ -60,20 +60,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let main = tokio::spawn(async move { axum::serve(listener, server).await });
 
+    let redis_conn_1 = state.redis_conn.clone();
+    let redis_conn_2 = state.redis_conn.clone();
+
     let server_status_background_worker = tokio::spawn(async move {
-        let _: () = server_status_worker(state.clone().available_servers.available_servers).await;
+        let _: () = server_status_worker(redis_conn_1).await;
         Ok(())
     });
 
-    // let latency_tracker_background_worker = tokio::spawn(async move {
-    //     let _: () = latency_tracker_worker(state.clone().available_servers.available_servers).await;
-    //     Ok(())
-    // });
+    let latency_tracker_background_worker = tokio::spawn(async move {
+        let _: () = latency_tracker_worker(redis_conn_2).await;
+        Ok(())
+    });
 
     let app = App::new(
         main,
         server_status_background_worker,
-        // latency_tracker_background_worker,
+        latency_tracker_background_worker,
     );
 
     app.start().await
@@ -85,24 +88,28 @@ type JoinHandleWrapper = JoinHandle<Result<(), std::io::Error>>;
 struct App {
     main: JoinHandleWrapper,
     background_worker: JoinHandleWrapper,
-    // latency_tracker_background_worker: JoinHandleWrapper,
+    latency_tracker_background_worker: JoinHandleWrapper,
 }
 
 impl App {
     fn new(
         main: JoinHandleWrapper,
         background_worker: JoinHandleWrapper,
-        // latency_tracker_background_worker: JoinHandleWrapper,
+        latency_tracker_background_worker: JoinHandleWrapper,
     ) -> Self {
         Self {
             main,
             background_worker,
-            // latency_tracker_background_worker,
+            latency_tracker_background_worker,
         }
     }
 
     async fn start(self) -> Result<(), Box<dyn std::error::Error>> {
-        match tokio::try_join!(self.main, self.background_worker) {
+        match tokio::try_join!(
+            self.main,
+            self.background_worker,
+            self.latency_tracker_background_worker
+        ) {
             Ok(_) => Ok(()),
             Err(err) => Err(err)?,
         }

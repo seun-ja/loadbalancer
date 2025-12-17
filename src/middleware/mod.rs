@@ -12,11 +12,11 @@ use crate::{config::State as AppState, error::Error};
 
 mod server;
 
-pub use server::{Server, ServerClients};
+pub use server::{Server, ServerClient};
 
 /// Middleware function to route requests to appropriate servers
 pub async fn request_route(
-    State(state): State<AppState>,
+    State(mut state): State<AppState>,
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Result<impl IntoResponse, Error> {
@@ -35,20 +35,28 @@ pub async fn request_route(
 
     let route = parts.uri.to_string();
 
-    let start_time = std::time::Instant::now();
-
-    let mut server: Server = state
-        .available_servers
-        .selected_server(state.algorithm)
+    let server_client = state
+        .algorithm
+        .select_server(state.redis_conn.clone())
         .await?;
 
-    let response = server
-        .handle_request(parts.method, route.trim_start_matches('/'), json_body)
+    let start_time = std::time::Instant::now();
+
+    let response = server_client
+        .handle_request(
+            parts.method,
+            route.trim_start_matches('/'),
+            json_body,
+            state.redis_conn.clone(),
+        )
         .await?;
 
     let latency = start_time.elapsed().as_millis();
 
-    server.update_latencies(latency);
+    state
+        .redis_conn
+        .update_server_mean_latency_record(server_client.url.as_str(), latency)
+        .await?;
 
     Ok(response.into_response())
 }

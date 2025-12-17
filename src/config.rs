@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::{
     algorithms::Algorithm,
     db::{self, RedisClient},
-    middleware::{Server, ServerClients},
+    middleware::Server,
 };
 
 #[derive(Deserialize)]
@@ -26,7 +26,6 @@ impl SystemConfig {
 
 #[derive(Clone)]
 pub struct State {
-    pub available_servers: ServerClients,
     pub redis_conn: RedisClient,
     pub algorithm: Algorithm,
 }
@@ -45,7 +44,6 @@ impl State {
             db::RedisClient::init_redis(&config.redis_url, available_servers.clone()).await?;
 
         Ok(State {
-            available_servers: ServerClients::new(available_servers),
             redis_conn,
             algorithm: config.algorithm.clone().into(),
         })

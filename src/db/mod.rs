@@ -1,3 +1,3 @@
 mod redis;
 
-pub use redis::RedisClient;
+pub use redis::{RedisClient, ServerInfo, StaticServerData};

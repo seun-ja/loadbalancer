@@ -1,122 +1,38 @@
-use std::{
-    str::FromStr,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
-    },
-};
+use std::str::FromStr;
 
 use axum::response::{IntoResponse, Response};
 use reqwest::{Method, Response as ReqwestResponse, StatusCode, Url};
 
-use crate::{algorithms::Algorithm, error::Error};
-
-/// Represents a collection of server clients for load balancing
-#[derive(Clone)]
-pub struct ServerClients {
-    pub available_servers: Vec<Server>,
-}
-
-impl ServerClients {
-    pub fn new(available_servers: Vec<Server>) -> Self {
-        Self { available_servers }
-    }
-
-    /// Selects a server based on a load balancing algorithm
-    pub async fn selected_server(&self, algorithm: Algorithm) -> Result<Server, Error> {
-        algorithm
-            .select_server(&self.available_servers)
-            .await
-            .inspect(|s| {
-                s.load.fetch_add(1, Ordering::Acquire);
-            })
-    }
-}
+use crate::{
+    db::{RedisClient, StaticServerData},
+    error::Error,
+};
 
 #[derive(Clone)]
-pub struct Server {
+pub struct ServerClient {
     pub url: Url,
     pub client: reqwest::Client,
-    load: Arc<AtomicU32>,
-    weight: u32,
-    pub mean_latency: Arc<AtomicU64>,
-    pub latencies: Vec<u128>,
-    latencies_updated: Arc<AtomicBool>,
 }
 
-impl Server {
-    pub fn new(url_and_weight: &str) -> anyhow::Result<Server> {
-        let (url, weight) = url_and_weight
-            .split_once('$')
-            .ok_or_else(|| anyhow::anyhow!("Invalid server format, expected 'url$weight'"))?;
-
-        let weight = weight
-            .parse::<u32>()
-            .map_err(|_| anyhow::anyhow!("Invalid weight, expected a positive integer"))?;
-
-        let url = Url::from_str(url)?;
-
-        Ok(Self {
-            url,
-            client: Default::default(),
-            load: Arc::new(AtomicU32::new(0)),
-            weight,
-            mean_latency: Arc::new(AtomicU64::new(0)),
-            latencies: Vec::new(),
-            latencies_updated: Arc::new(AtomicBool::new(false)),
-        })
-    }
-
-    /// Returns the current load of the server
-    pub fn load(&self) -> u32 {
-        self.load.load(Ordering::Relaxed)
-    }
-
-    /// Returns the weight of the server
-    pub fn weight(&self) -> u32 {
-        self.weight
-    }
-
-    pub fn update_latencies(&mut self, latency: u128) {
-        if self.latencies.len() >= 20 {
-            // TODO: make it customisable
-            self.latencies.remove(0);
-        }
-        self.latencies.push(latency);
-    }
-
-    pub fn latency_updated(&self) -> bool {
-        self.latencies_updated.load(Ordering::Relaxed)
-    }
-
-    pub fn latency_update_status(&self, b: bool) {
-        self.latencies_updated.store(b, Ordering::Relaxed)
-    }
-
-    pub fn mean_latency(&self) -> u64 {
-        self.mean_latency.load(Ordering::Relaxed)
-    }
-
+impl ServerClient {
     /// Handles incoming requests and forwards them to the server
     pub async fn handle_request(
         &self,
         method: Method,
         route: &str,
         body: Option<serde_json::Value>,
+        mut redis_conn: RedisClient,
     ) -> Result<ApiResponse, Error> {
-        // TODO: What if the request fails is the load count reduced?
-        match method {
-            Method::GET => self.get_request(route, body).await.inspect(|_| {
-                self.load.fetch_sub(1, Ordering::Release);
-            }),
-            Method::POST => self.post_request(route, body).await.inspect(|_| {
-                self.load.fetch_sub(1, Ordering::Release);
-            }),
-            _ => {
-                self.load.fetch_sub(1, Ordering::Release);
-                Err(Error::MethodNotAllowed)
-            }
-        }
+        let result = match method {
+            Method::GET => self.get_request(route, body).await,
+            Method::POST => self.post_request(route, body).await,
+            _ => return Err(Error::MethodNotAllowed),
+        };
+
+        // Update load once, regardless of success or failure
+        redis_conn.update_server_load(self.url.as_str(), 1).await?;
+
+        result
     }
 
     /// Sends a POST request to the server
@@ -172,6 +88,90 @@ impl Server {
             }
         } else {
             false
+        }
+    }
+}
+
+impl From<StaticServerData> for ServerClient {
+    fn from(value: StaticServerData) -> Self {
+        Self {
+            url: value.url,
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Server {
+    pub url: Url,
+    pub client: reqwest::Client,
+    load: u32,
+    weight: u32,
+    pub mean_latency: u128,
+    pub latencies: Vec<u128>,
+    latencies_updated: bool,
+}
+
+impl Server {
+    pub fn new(url_and_weight: &str) -> anyhow::Result<Server> {
+        let (url, weight) = url_and_weight
+            .split_once('$')
+            .ok_or_else(|| anyhow::anyhow!("Invalid server format, expected 'url$weight'"))?;
+
+        let weight = weight
+            .parse::<u32>()
+            .map_err(|_| anyhow::anyhow!("Invalid weight, expected a positive integer"))?;
+
+        let url = Url::from_str(url)?;
+
+        Ok(Self {
+            url,
+            client: Default::default(),
+            load: 0,
+            weight,
+            mean_latency: 0,
+            latencies: Vec::new(),
+            latencies_updated: false,
+        })
+    }
+
+    /// Returns the current load of the server
+    pub fn load(&self) -> u32 {
+        self.load
+    }
+
+    /// Returns the weight of the server
+    pub fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    pub fn update_latencies(&mut self, latency: u128) {
+        if self.latencies.len() >= 20 {
+            // TODO: make it customisable
+            self.latencies.remove(0);
+        }
+        self.latencies.push(latency);
+    }
+
+    pub fn latency_updated(&self) -> bool {
+        self.latencies_updated
+    }
+
+    pub fn mean_latency(&self) -> u128 {
+        self.mean_latency
+    }
+
+    pub fn static_data(self) -> anyhow::Result<String> {
+        let static_data: StaticServerData = self.into();
+        Ok(serde_json::to_string(&static_data)?)
+    }
+}
+
+impl From<Server> for StaticServerData {
+    fn from(info: Server) -> Self {
+        Self {
+            url: info.url,
+            weight: info.weight,
         }
     }
 }
