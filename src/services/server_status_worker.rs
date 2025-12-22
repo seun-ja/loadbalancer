@@ -14,10 +14,10 @@ pub async fn server_status_worker(redis_conn: RedisClient) {
 async fn server_status(mut redis_conn: RedisClient) -> Result<(), Vec<String>> {
     let mut failing_servers = Vec::new();
 
-    if let Ok(data) = redis_conn.get_all_server_data().await {
-        for (url, data) in data {
-            if !data.is_available().await {
-                failing_servers.push(url);
+    if let Ok(data) = redis_conn.get_all_server_url().await {
+        for server in data {
+            if !server.is_available().await {
+                failing_servers.push(server.url.to_string());
             }
         }
     }

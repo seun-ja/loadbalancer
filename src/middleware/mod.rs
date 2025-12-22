@@ -12,7 +12,7 @@ use crate::{config::State as AppState, error::Error};
 
 mod server;
 
-pub use server::{Server, ServerClient};
+pub use server::{ServerClient, StaticServerData};
 
 /// Middleware function to route requests to appropriate servers
 pub async fn request_route(
@@ -53,9 +53,10 @@ pub async fn request_route(
 
     let latency = start_time.elapsed().as_millis();
 
+    // TODO: move to background
     state
         .redis_conn
-        .update_server_mean_latency_record(server_client.url.as_str(), latency)
+        .update_server_latency_record(server_client.url.as_str(), latency)
         .await?;
 
     Ok(response.into_response())

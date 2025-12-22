@@ -1,12 +1,10 @@
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use axum::response::{IntoResponse, Response};
 use reqwest::{Method, Response as ReqwestResponse, StatusCode, Url};
+use serde::{Deserialize, Serialize};
 
-use crate::{
-    db::{RedisClient, StaticServerData},
-    error::Error,
-};
+use crate::{db::RedisClient, error::Error};
 
 #[derive(Clone)]
 pub struct ServerClient {
@@ -101,19 +99,18 @@ impl From<StaticServerData> for ServerClient {
     }
 }
 
-#[derive(Clone)]
-pub struct Server {
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StaticServerData {
     pub url: Url,
-    pub client: reqwest::Client,
-    load: u32,
-    weight: u32,
-    pub mean_latency: u128,
-    pub latencies: Vec<u128>,
-    latencies_updated: bool,
+    pub weight: u32,
 }
 
-impl Server {
-    pub fn new(url_and_weight: &str) -> anyhow::Result<Server> {
+impl StaticServerData {
+    pub fn from_json(data: String) -> Result<Self, Error> {
+        serde_json::from_str(&data).map_err(Error::SerializationError)
+    }
+
+    pub fn new(url_and_weight: &str) -> anyhow::Result<Self> {
         let (url, weight) = url_and_weight
             .split_once('$')
             .ok_or_else(|| anyhow::anyhow!("Invalid server format, expected 'url$weight'"))?;
@@ -124,55 +121,11 @@ impl Server {
 
         let url = Url::from_str(url)?;
 
-        Ok(Self {
-            url,
-            client: Default::default(),
-            load: 0,
-            weight,
-            mean_latency: 0,
-            latencies: Vec::new(),
-            latencies_updated: false,
-        })
-    }
-
-    /// Returns the current load of the server
-    pub fn load(&self) -> u32 {
-        self.load
-    }
-
-    /// Returns the weight of the server
-    pub fn weight(&self) -> u32 {
-        self.weight
-    }
-
-    pub fn update_latencies(&mut self, latency: u128) {
-        if self.latencies.len() >= 20 {
-            // TODO: make it customisable
-            self.latencies.remove(0);
-        }
-        self.latencies.push(latency);
-    }
-
-    pub fn latency_updated(&self) -> bool {
-        self.latencies_updated
-    }
-
-    pub fn mean_latency(&self) -> u128 {
-        self.mean_latency
+        Ok(Self { url, weight })
     }
 
     pub fn static_data(self) -> anyhow::Result<String> {
-        let static_data: StaticServerData = self.into();
-        Ok(serde_json::to_string(&static_data)?)
-    }
-}
-
-impl From<Server> for StaticServerData {
-    fn from(info: Server) -> Self {
-        Self {
-            url: info.url,
-            weight: info.weight,
-        }
+        Ok(serde_json::to_string(&self)?)
     }
 }
 
