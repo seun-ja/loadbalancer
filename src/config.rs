@@ -3,12 +3,12 @@ use serde::Deserialize;
 use crate::{
     algorithms::Algorithm,
     db::{self, RedisClient},
-    middleware::{Server, ServerClients},
+    middleware::StaticServerData,
 };
 
 #[derive(Deserialize)]
 pub struct SystemConfig {
-    pub available_servers: String, // TODO: This should be hosted in redis
+    pub available_servers: String,
     pub port: u16,
     pub redis_url: String,
     pub algorithm: String,
@@ -20,13 +20,12 @@ impl SystemConfig {
         dotenvy::dotenv_override().ok();
 
         envy::from_env::<Self>()
-            .map_err(|e| anyhow::anyhow!("Failed to load environment variables: {}", e))
+            .map_err(|e| anyhow::anyhow!("Failed to load environment variable(s): {}", e))
     }
 }
 
 #[derive(Clone)]
 pub struct State {
-    pub available_servers: ServerClients,
     pub redis_conn: RedisClient,
     pub algorithm: Algorithm,
 }
@@ -35,17 +34,16 @@ impl State {
     pub async fn new(config: &SystemConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let servers = config.available_servers.split(',').collect::<Vec<&str>>();
 
-        let available_servers: Vec<Server> = servers
+        let available_servers: Vec<StaticServerData> = servers
             .clone()
             .into_iter()
-            .map(Server::new)
-            .collect::<Result<Vec<Server>, _>>()?;
+            .map(StaticServerData::new)
+            .collect::<Result<Vec<StaticServerData>, _>>()?;
 
         let redis_conn =
             db::RedisClient::init_redis(&config.redis_url, available_servers.clone()).await?;
 
         Ok(State {
-            available_servers: ServerClients::new(available_servers),
             redis_conn,
             algorithm: config.algorithm.clone().into(),
         })

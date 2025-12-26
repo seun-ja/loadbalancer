@@ -1,27 +1,24 @@
-use std::sync::atomic::Ordering;
+use crate::db::RedisClient;
 
-use crate::middleware::Server;
-
-pub async fn _latency_tracker_worker(available_servers: Vec<Server>) {
+pub async fn latency_tracker_worker(redis_conn: RedisClient) {
     loop {
-        _check(&available_servers);
+        check(redis_conn.clone()).await;
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 }
 
-fn _check(servers: &[Server]) {
-    for server in servers {
-        if server.latency_updated() {
-            server.latency_update_status(false);
-            let mean_latency = _mean_latency(&server.latencies);
-            server
-                .mean_latency
-                .store(mean_latency as u64, Ordering::Relaxed);
+async fn check(mut redis_conn: RedisClient) {
+    if let Ok(data) = redis_conn.get_servers_latency_record().await {
+        for (url, latencies) in data {
+            let mean_latency = mean_latency(latencies);
+            _ = redis_conn
+                .update_server_mean_latency(&url, mean_latency)
+                .await;
         }
     }
 }
 
-fn _mean_latency(latencies: &[u128]) -> u128 {
+fn mean_latency(latencies: Vec<u128>) -> u128 {
     if latencies.is_empty() {
         0
     } else {

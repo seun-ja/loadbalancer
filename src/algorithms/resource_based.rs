@@ -1,6 +1,8 @@
-use crate::{error::Error, middleware::Server};
+use crate::{error::Error, middleware::StaticServerData};
 
 // TODO: Implement resource-based load balancing algorithm
-pub async fn resource_based(available_servers: &[Server]) -> Result<Server, Error> {
+pub async fn _resource_based(
+    available_servers: &[StaticServerData],
+) -> Result<StaticServerData, Error> {
     Ok(available_servers[0].clone())
 }

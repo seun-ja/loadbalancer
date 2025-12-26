@@ -1,3 +1,5 @@
+use std::string::ParseError;
+
 use axum::response::{IntoResponse, Response};
 use reqwest::StatusCode;
 
@@ -22,6 +24,12 @@ pub enum Error {
     InvalidResponse,
     #[error("No Server Available")]
     NoServerAvailable,
+    #[error("Parse Error")]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("Parse Error")]
+    ParseError(#[from] ParseError),
+    #[error("Serialization Error")]
+    SerializationError(#[from] serde_json::Error),
 }
 
 impl IntoResponse for Error {
@@ -32,7 +40,11 @@ impl IntoResponse for Error {
             | Error::Other(_)
             | Error::InvalidResponse
             | Error::RedisError(_)
-            | Error::NoServerAvailable => {
+            | Error::NoServerAvailable
+            | Error::ParseIntError(_)
+            | Error::ParseError(_)
+            | Error::SerializationError(_) => {
+                // TODO: Log error
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             Error::Unauthorized => (StatusCode::UNAUTHORIZED, self).into_response(),

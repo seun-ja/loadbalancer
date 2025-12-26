@@ -1,4 +1,6 @@
-use crate::{error::Error, middleware::Server};
+use reqwest::Url;
+
+use crate::{db::RedisClient, error::Error, middleware::ServerClient};
 
 mod least_connection;
 mod resource_based;
@@ -27,18 +29,34 @@ impl From<String> for Algorithm {
 }
 
 impl Algorithm {
-    pub async fn select_server(&self, available_servers: &[Server]) -> Result<Server, Error> {
-        match self {
-            Algorithm::LeastConnection => {
-                least_connection::least_connection(available_servers).await
-            }
-            Algorithm::ResourceBased => resource_based::resource_based(available_servers).await,
+    pub async fn select_server(
+        &self,
+        mut redis_client: RedisClient,
+    ) -> Result<ServerClient, Error> {
+        let server_loads = redis_client.get_all_server_load().await?;
+        let weights = redis_client.get_all_server_weights().await?;
+        let url = match self {
+            Algorithm::LeastConnection => least_connection::least_connection(server_loads).await,
+            Algorithm::ResourceBased => unimplemented!(),
             Algorithm::WeightedLeastConnection => {
-                weighted_least_connection::weighted_least_connection(available_servers).await
+                weighted_least_connection::weighted_least_connection(server_loads, weights).await
             }
             Algorithm::WeightedResponseTime => {
-                weighted_response_time::weighted_response_time(available_servers).await
+                weighted_response_time::weighted_response_time(
+                    redis_client.get_all_server_mean_latency().await?,
+                    weights,
+                )
+                .await
             }
-        }
+        }?;
+
+        redis_client.update_server_load(&url, 1).await?;
+
+        let url = url.parse::<Url>().map_err(|e| Error::Other(e.into()))?;
+
+        Ok(ServerClient {
+            url,
+            client: reqwest::Client::new(),
+        })
     }
 }
