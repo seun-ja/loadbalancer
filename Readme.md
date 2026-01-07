@@ -12,7 +12,7 @@ Prerequisites:
 Create a `.env` file at the project root (example):
 
 ```bash
-AVAILABLE_SERVERS=http://localhost:3001$4,http://localhost:3002$8
+AVAILABLE_SERVERS=http://localhost:3001|4,http://localhost:3002|8
 PORT=8080
 ```
 

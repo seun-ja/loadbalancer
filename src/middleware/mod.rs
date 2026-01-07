@@ -28,6 +28,7 @@ pub async fn request_route(
 
     tracing::info!("New Request Received");
 
+    // TODO: How expensive is this?
     let json_body = BodyBytes::from_body_data_stream(body.into_data_stream())
         .await?
         .to_json()

@@ -19,8 +19,7 @@ impl SystemConfig {
     pub fn from_env() -> anyhow::Result<Self> {
         dotenvy::dotenv_override().ok();
 
-        envy::from_env::<Self>()
-            .map_err(|e| anyhow::anyhow!("Failed to load environment variable(s): {}", e))
+        envy::from_env::<Self>().map_err(|e| anyhow::anyhow!("Failed to load configuration: {}", e))
     }
 }
 

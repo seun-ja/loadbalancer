@@ -112,7 +112,7 @@ impl StaticServerData {
 
     pub fn new(url_and_weight: &str) -> anyhow::Result<Self> {
         let (url, weight) = url_and_weight
-            .split_once('$')
+            .split_once('|')
             .ok_or_else(|| anyhow::anyhow!("Invalid server format, expected 'url$weight'"))?;
 
         let weight = weight

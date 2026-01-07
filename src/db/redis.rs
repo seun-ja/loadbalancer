@@ -15,8 +15,12 @@ impl RedisClient {
         redis_url: &str,
         available_servers: Vec<StaticServerData>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let nodes = vec![redis_url];
-        let client = ClusterClient::new(nodes)?;
+        let urls = redis_url
+            .split(',')
+            .map(|url| url.to_string())
+            .collect::<Vec<String>>();
+
+        let client = ClusterClient::new(urls)?;
         let connection = client.get_async_connection().await?;
 
         let mut client = Self(connection);
