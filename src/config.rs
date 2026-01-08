@@ -13,6 +13,7 @@ pub struct SystemConfig {
     pub redis_url: String,
     pub algorithm: String,
     pub trace_level: String,
+    pub default_location: String,
 }
 
 impl SystemConfig {
@@ -27,6 +28,7 @@ impl SystemConfig {
 pub struct State {
     pub redis_conn: RedisClient,
     pub algorithm: Algorithm,
+    pub default_location: String,
 }
 
 impl State {
@@ -45,6 +47,7 @@ impl State {
         Ok(State {
             redis_conn,
             algorithm: config.algorithm.clone().into(),
+            default_location: config.default_location.clone(),
         })
     }
 }

@@ -31,7 +31,7 @@ impl RedisClient {
 
             client
                 .update_server_weight(server.url.as_str(), server.weight)
-                .await?
+                .await?;
         }
 
         Ok(client)
@@ -58,13 +58,13 @@ impl RedisClient {
 
     /// Update the data of a server in Redis.
     pub async fn update_server_url(&mut self, value: &str) -> Result<(), Error> {
-        Ok(self.0.rpush("server_url", value).await.map(|_| ())?)
+        Ok(self.0.rpush("server_urls", value).await.map(|_| ())?)
     }
 
     /// Get all server data from Redis.
     pub async fn get_all_server_url(&mut self) -> Result<Vec<ServerClient>, Error> {
         self.0
-            .lrange("server_url", 0, -1)
+            .lrange("server_urls", 0, -1)
             .await?
             .into_iter()
             .map(|v| Ok(StaticServerData::from_json(v)?.into()))

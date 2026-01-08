@@ -34,7 +34,7 @@ The server binds to the configured PORT.
 
 This project reads configuration from environment variables. The important variables are:
 
-`AVAILABLE_SERVERS` — comma-separated list of backend base URLs and their weights (e.g. http://host:port$weight).
+`AVAILABLE_SERVERS` — comma-separated list of backend base URLs and their weights (e.g. http://host:port|weight).
 
 `PORT` — port to bind the load balancer to.
 
