@@ -36,9 +36,15 @@ pub async fn request_route(
 
     let route = parts.uri.to_string();
 
+    let location = parts
+        .headers
+        .get("X-Location")
+        .and_then(|l| l.to_str().ok())
+        .unwrap_or(&state.default_location);
+
     let server_client = state
         .algorithm
-        .select_server(state.redis_conn.clone())
+        .select_server(state.redis_conn.clone(), location)
         .await?;
 
     let start_time = std::time::Instant::now();
