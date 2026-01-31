@@ -2,6 +2,9 @@
 name = "load-balancer"
 version = "0.1.0"
 edition = "2024"
+authors = ["Aminu 'Seun Joshua <seun.aminujoshua@gmail.com>"]
+description = "A load balancer for a distributed system"
+
 
 [dependencies]
 axum = { version = "0.8.7" }
