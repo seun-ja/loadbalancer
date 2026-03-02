@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use axum::{Router, routing::get};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tower_http::{
@@ -40,7 +42,13 @@ impl App {
             ))
             .with_state(state.clone());
 
-        let main = tokio::spawn(async move { axum::serve(listener, server).await });
+        let main = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                server.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+        });
 
         let redis_conn_1 = state.redis_conn.clone();
         let redis_conn_2 = state.redis_conn.clone();

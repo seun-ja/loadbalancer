@@ -1,6 +1,8 @@
+use std::net::SocketAddr;
+
 use axum::{
     body::{BodyDataStream, Bytes},
-    extract::State,
+    extract::{ConnectInfo, State},
     http::Request,
     middleware::Next,
     response::IntoResponse,
@@ -23,6 +25,11 @@ pub async fn request_route(
     if req.uri().path().starts_with("/status") {
         return Ok(next.run(req).await);
     }
+
+    let _client_ip = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(addr)| addr.ip());
 
     let (parts, body) = req.into_parts();
 
